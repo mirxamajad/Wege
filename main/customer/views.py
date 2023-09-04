@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from .serializers import CustomerSerializer
+from rest_framework import status
 from .models import Customer
 import jwt, datetime
 
@@ -11,7 +12,7 @@ class CustomerRegisterView(APIView):
         serializer = CustomerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        return Response({"data": serializer.data,"message": "Success", "status": status.HTTP_201_CREATED}, status=status.HTTP_201_CREATED)
 
 
 class CustomerLoginView(APIView):
@@ -22,10 +23,10 @@ class CustomerLoginView(APIView):
         customer = Customer.objects.filter(email=email).first()
 
         if customer is None:
-            raise AuthenticationFailed('Customer not found!')
+            return Response({'message':'Customer not found!', "status": status.HTTP_404_NOT_FOUND}, status=status.HTTP_404_NOT_FOUND)
 
         if not customer.check_password(password):
-            raise AuthenticationFailed('Incorrect password!')
+            return Response({'error': 'Unauthorized', "status": status.HTTP_401_UNAUTHORIZED}, status=status.HTTP_401_UNAUTHORIZED)
 
         payload = {
             'id': customer.id,
@@ -35,12 +36,13 @@ class CustomerLoginView(APIView):
 
         # token = jwt.encode(payload, 'secret', algorithm='HS256').decode('utf-8')
         token = jwt.encode(payload, 'secret', algorithm='HS256')
-
-        response = Response()
+        
+        response = Response(status=status.HTTP_200_OK)
 
         response.set_cookie(key='jwt', value=token, httponly=True)
         response.data = {
-            'jwt': token
+            'token': token,
+            "status": status.HTTP_200_OK
         }
         return response
 
@@ -51,16 +53,16 @@ class CustomerUserView(APIView):
         token = request.COOKIES.get('jwt')
 
         if not token:
-            raise AuthenticationFailed('Unauthenticated!')
+            return Response({'error': 'Unauthorized', "status": status.HTTP_401_UNAUTHORIZED}, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
             payload = jwt.decode(token, 'secret', algorithms=['HS256'])
         except jwt.ExpiredSignatureError:
-            raise AuthenticationFailed('Unauthenticated!')
+             return Response({'error': 'Unauthorized', "status": status.HTTP_401_UNAUTHORIZED}, status=status.HTTP_401_UNAUTHORIZED)
 
         customer = Customer.objects.filter(id=payload['id']).first()
         serializer = CustomerSerializer(customer)
-        return Response(serializer.data)
+        return Response({"data":serializer.data , "status": status.HTTP_200_OK},status=status.HTTP_200_OK)
 
 
 class CustomerLogoutView(APIView):
@@ -68,6 +70,7 @@ class CustomerLogoutView(APIView):
         response = Response()
         response.delete_cookie('jwt')
         response.data = {
-            'message': 'success'
+            'message': 'success',
+            "status": status.HTTP_200_OK
         }
         return response
